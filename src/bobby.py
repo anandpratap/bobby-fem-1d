@@ -5,18 +5,20 @@ from quadratures import GaussianQuadrature
 from shapefunctions import ShapeFunction
 
 class Bobby1D(object):
-    def __init__(self, x, u, tf, cfl = 0.5, periodic = True, step_count_max = 2):
+    def __init__(self, x, u, tf, cfl = 0.5, periodic = True, step_count_max = 2, implicit = False):
         self.x = x.copy()
         self.u = u.copy()
         self.tf = tf
         self.cfl = cfl
         self.periodic = periodic
         self.step_count_max = step_count_max
+        self.implicit = implicit
 
         dx = self.x[1:] - self.x[0:-1]
-        self.dt = dx.min()*self.cfl
+        self.dxmin = dx.min()
 
         self.dudt = np.zeros_like(self.x)
+        self.du = np.zeros_like(self.x)
 
         self.n = self.x.size        
         self.nelements = self.n - 1
@@ -28,6 +30,13 @@ class Bobby1D(object):
         self.quadrature = GaussianQuadrature()
         self.shape_function = ShapeFunction()
         self.N = [lambda chi: self.shape_function.value(chi, 0), lambda chi: self.shape_function.value(chi, 1)]
+        self.setup()
+        
+    def setup(self):
+        pass
+
+    def calc_dt(self):
+        self.dt = 0.0
 
     def get_dchidx(self, el):
         dxdchi = self.get_dxdchi(el)
@@ -56,6 +65,7 @@ class Bobby1D(object):
         self.global_rhs[el+1] += local_rhs[1]
 
     def step(self):
+        self.calc_dt()
         self.global_rhs[:] = 0.0
         self.global_lhs[:,:] = 0.0
 
@@ -67,16 +77,29 @@ class Bobby1D(object):
         pass
 
     def post_assembly(self):
-        start = 0
-        self.global_rhs[-1] -= self.u[-1]
-
+        start = 1
+        #self.global_rhs[-1] -= self.flux(self.u[-1])
+        self.global_rhs[-1] += self.global_rhs[0]
         if self.periodic:
+            if self.implicit:
+                pass
+                #self.global_lhs[-1,-1] += self.dflux(self.u[-1])
             self.global_lhs[1,-1] = self.global_lhs[1,0]
+            self.global_lhs[-1,1] = self.global_lhs[0,1]
+            self.global_lhs[-1,-1] += self.global_lhs[0,0]
+            print self.global_lhs
             start = 1
         #print self.global_lhs
         #print self.u[-1]
-        self.dudt[start:] = np.linalg.solve(self.global_lhs[start:,start:], self.global_rhs[start:])
-        self.u[start:] += self.dudt[start:]*self.dt
+
+
+        if self.implicit:
+            self.du[start:] = np.linalg.solve(self.global_lhs[start:,start:], self.global_rhs[start:])
+            self.u[start:] += self.du[start:]
+            self.dudt[start:] = self.du[start:]/self.dt
+        else:
+            self.dudt[start:] = np.linalg.solve(self.global_lhs[start:,start:], self.global_rhs[start:])
+            self.u[start:] += self.dudt[start:]*self.dt
         #print self.u[-1]
         #print self.dudt[:]*self.dt
         if self.periodic:
