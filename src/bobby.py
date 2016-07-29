@@ -78,21 +78,21 @@ class Bobby1D(object):
 
     def post_assembly(self):
         start = 1
-        #self.global_rhs[-1] -= self.flux(self.u[-1])
-        self.global_rhs[-1] += self.global_rhs[0]
+
         if self.periodic:
-            if self.implicit:
-                pass
-                #self.global_lhs[-1,-1] += self.dflux(self.u[-1])
+            self.global_rhs[-1] += self.global_rhs[0]
             self.global_lhs[1,-1] = self.global_lhs[1,0]
             self.global_lhs[-1,1] = self.global_lhs[0,1]
             self.global_lhs[-1,-1] += self.global_lhs[0,0]
-            print self.global_lhs
-            start = 1
+        else:
+            self.global_rhs[-1] -= self.flux(self.u[-1])
+            if self.implicit:
+                self.global_lhs[-1,-1] += self.dflux(self.u[-1])
+            
         #print self.global_lhs
         #print self.u[-1]
 
-
+        
         if self.implicit:
             self.du[start:] = np.linalg.solve(self.global_lhs[start:,start:], self.global_rhs[start:])
             self.u[start:] += self.du[start:]
