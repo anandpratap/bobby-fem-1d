@@ -56,7 +56,7 @@ class OneDimensionalWave(Bobby1D):
         
 
         if self.implicit:
-            tmp_func = lambda chi : 1#self.dflux(func_u_chi(chi))
+            tmp_func = lambda chi : self.dflux(func_u_chi(chi))
             local_linearization[0,0] -= integral(self.dN[0], tmp_func, self.N[0])*dxdchi
             local_linearization[0,1] -= integral(self.dN[0], tmp_func, self.N[1])*dxdchi
             local_linearization[1,0] -= integral(self.dN[1], tmp_func, self.N[0])*dxdchi
@@ -64,7 +64,7 @@ class OneDimensionalWave(Bobby1D):
             
 
             tmp_func_1 = lambda chi: self.ddflux(func_u_chi(chi))*(self.dN[0](chi)*u_local[0] + self.dN[1](chi)*u_local[1])
-            tmp_func_2 = lambda chi: 1#self.dflux(func_u_chi(chi))
+            tmp_func_2 = lambda chi: self.dflux(func_u_chi(chi))
             
             local_linearization[0,0] += integral(self.dN[0], func_tau_chi, tmp_func_2, self.dN[0])*dxdchi
             local_linearization[0,1] += integral(self.dN[0], func_tau_chi, tmp_func_2, self.dN[1])*dxdchi
