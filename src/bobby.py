@@ -7,6 +7,7 @@ from equations import Equation
 
 class Bobby1D(object):
     def __init__(self, x, u, tf, cfl = 0.5, periodic = True, step_count_max = 2, implicit = False, equation=Equation(), func_initial = None, solve_fd=False):
+        self.setup(equation)
         self.x = x.copy()
         self.u = u.copy()
         self.tf = tf
@@ -19,46 +20,26 @@ class Bobby1D(object):
         dx = self.x[1:] - self.x[0:-1]
         self.dxmin = dx.min()
         self.u_old = self.u.copy()
-        self.dudt = np.zeros_like(self.x)
-        self.du = np.zeros_like(self.x)
+        self.dudt = np.zeros_like(self.u)
+        self.du = np.zeros_like(self.u)
 
         self.n = self.x.size        
         self.nelements = self.n - 1
         self.t = 0.0
         self.step_count = 0
-        self.global_rhs = np.zeros([self.n])
-        self.global_lhs = np.zeros([self.n, self.n])
-        self.global_mass = np.zeros([self.n, self.n])
-        self.global_linearization = np.zeros([self.n, self.n])
+        self.global_rhs = np.zeros([self.n*self.nvar])
+        self.global_lhs = np.zeros([self.n*self.nvar, self.n*self.nvar])
+        self.global_mass = np.zeros([self.n*self.nvar, self.n*self.nvar])
+        self.global_linearization = np.zeros([self.n*self.nvar, self.n*self.nvar])
 
         self.quadrature = GaussianQuadrature()
         self.shape_function = ShapeFunction()
         self.N = [lambda chi: self.shape_function.value(chi, 0), lambda chi: self.shape_function.value(chi, 1)]
-        self.setup(equation)
 
         self.solve_fd = solve_fd
         if self.solve_fd:
             self.u_fd = self.u.copy()
             self.u_fd_new = self.u.copy()
-
-    def step_fd(self):
-        if self.periodic:
-            start = 1
-        else:
-            start = 0
-
-        for i in range(start, self.n):
-            uavg = self.u_fd[i]
-            w = self.wavespeed(uavg)
-            if w >= 0:
-                self.u_fd_new[i] = self.u_fd[i] - \
-                (self.flux(self.u_fd[i]) - self.flux(self.u_fd[i-1]))/(self.x[i] - self.x[i-1])*self.dt
-            else:
-                self.u_fd_new[i] = self.u_fd[i] - \
-                (self.flux(self.u_fd[i+1]) - self.flux(self.u_fd[i]))/(self.x[i+1] - self.x[i])*self.dt
-        if self.periodic:
-            self.u_fd_new[0] = self.u_fd_new[-1]
-        self.u_fd[:] = self.u_fd_new[:]
 
     def setup(self, equation):
         pass
@@ -80,25 +61,35 @@ class Bobby1D(object):
         return h/2.0
         
     def get_local_variables(self, var, el):
-        return np.array([var[el], var[el+1]])
+        var_tmp = np.zeros([2, self.nvar])
+        for ivar in range(self.nvar):
+            var_tmp[:,ivar] = np.array([var[el*self.nvar + ivar], var[(el+1)*self.nvar + ivar]])
+        return var_tmp
 
     def global_assembly(self, local_rhs, local_mass, local_linearization, el):
-        self.global_mass[el, el] += local_mass[0,0]
-        self.global_mass[el, el+1] += local_mass[0,1]
-        
-        self.global_mass[el+1, el] += local_mass[1,0]
-        self.global_mass[el+1, el+1] += local_mass[1,1]
+        nvar = self.nvar
+        for ivar in range(self.nvar):
+            for jvar in range(self.nvar):
+                self.global_mass[el*nvar+ivar, el*nvar+jvar] += local_mass[0+2*ivar,0+2*jvar]
+                self.global_mass[el*nvar+ivar, (el+1)*nvar+jvar] += local_mass[0+2*ivar,1+2*jvar]
+                
+                self.global_mass[(el+1)*nvar+ivar, el*nvar+jvar] += local_mass[1+2*ivar,0+2*jvar]
+                self.global_mass[(el+1)*nvar+ivar, (el+1)*nvar+jvar] += local_mass[1+2*ivar,1+2*jvar]
+                
+                self.global_linearization[el*nvar+ivar, el*nvar+jvar] += local_linearization[0+2*ivar,0+2*jvar]
+                self.global_linearization[el*nvar+ivar, (el+1)*nvar+jvar] += local_linearization[0+2*ivar,1+2*jvar]
+                
+                self.global_linearization[(el+1)*nvar+ivar, el*nvar+jvar] += local_linearization[1+2*ivar,0+2*jvar]
+                self.global_linearization[(el+1)*nvar+ivar, (el+1)*nvar+jvar] += local_linearization[1+2*ivar,1+2*jvar]
+            self.global_rhs[el*nvar + ivar] += local_rhs[0 + 2*ivar]
+            self.global_rhs[(el+1)*nvar + ivar] += local_rhs[1 + 2*ivar]
 
-        self.global_linearization[el, el] += local_linearization[0,0]
-        self.global_linearization[el, el+1] += local_linearization[0,1]
+        #print local_mass
+        #print self.global_mass
         
-        self.global_linearization[el+1, el] += local_linearization[1,0]
-        self.global_linearization[el+1, el+1] += local_linearization[1,1]
-
-        self.global_rhs[el] += local_rhs[0]
-        self.global_rhs[el+1] += local_rhs[1]
 
     def step(self):
+        self.u = np.maximum(self.u, 1e-14)
         self.calc_dt()
         self.global_mass[:,:] = 0.0
         self.global_linearization[:,:] = 0.0
@@ -114,7 +105,7 @@ class Bobby1D(object):
 
     def post_assembly(self):
         if self.periodic:
-            start = 1
+            start = 1*self.nvar
         else:
             start = 0
 
@@ -127,23 +118,26 @@ class Bobby1D(object):
 
 
         if self.periodic:
-            self.global_rhs[-1] += self.global_rhs[0]
-            self.global_lhs[1,-1] = self.global_lhs[1,0]
-            self.global_lhs[-1,1] = self.global_lhs[0,1]
-            self.global_lhs[-1,-1] += self.global_lhs[0,0]
+            for ivar in range(self.nvar):
+                self.global_rhs[ivar-self.nvar] += self.global_rhs[ivar]
+                self.global_lhs[1*self.nvar+ivar,-1*self.nvar+ivar] = self.global_lhs[1*self.nvar+ivar,ivar]
+                self.global_lhs[-1*self.nvar+ivar,1*self.nvar+ivar] = self.global_lhs[ivar,1*self.nvar+ivar]
+                self.global_lhs[-1*self.nvar+ivar,-1*self.nvar+ivar] += self.global_lhs[ivar,ivar]
         else:
-            self.global_rhs[-1] -= self.flux(self.u[-1])
-            if self.implicit:
-                self.global_lhs[-1,-1] += self.dflux(self.u[-1])
-            self.global_rhs[0] += self.flux(self.u[0])
-            if self.implicit:
-                self.global_lhs[0,0] -= self.dflux(self.u[0])
+            for ivar in range(self.nvar):
+                self.global_rhs[ivar-self.nvar] -= self.flux[ivar](self.u[-self.nvar:])
+                if self.implicit:
+                    self.global_lhs[ivar-self.nvar,ivar-self.nvar] += self.dflux[ivar][ivar](self.u[-self.nvar:])
+                    
+                self.global_rhs[ivar] += self.flux[ivar](self.u[:self.nvar])
+                if self.implicit:
+                    self.global_lhs[ivar,ivar] -= self.dflux[ivar][ivar](self.u[:self.nvar])
 
     def step_solve(self):
         #print self.global_lhs
         #print self.u[-1]
         if self.periodic:
-            start = 1
+            start = 1*self.nvar
         else:
             start = 0
 
@@ -153,13 +147,14 @@ class Bobby1D(object):
             for i in range(30):
                 self.du[start:] = np.linalg.solve(self.global_lhs[start:,start:], self.global_rhs[start:])
                 self.u[start:] = self.u[start:] + self.du[start:]
-                self.dudt[start:] = self.du[start:]/self.dt
+                self.dudt[start:] = (self.u[start:]-self.u_old[start:])/self.dt
                 if self.periodic:
-                    self.u[0] = self.u[-1]
-                    self.dudt[0] = self.dudt[-1]
+                    for ivar in range(self.nvar):
+                        self.u[ivar] = self.u[ivar-self.nvar]
+                        self.dudt[ivar] = self.dudt[ivar-self.nvar]
                     
+                self.u = np.maximum(self.u, 1e-14)
                 self.step()
-                
                 if i == 0:
                     dunorm_1 = np.linalg.norm(self.du)
                     print "dunorm = ", dunorm_1
@@ -167,7 +162,7 @@ class Bobby1D(object):
                     dunorm = np.linalg.norm(self.du)
                     print "dunorm = ", dunorm
                     tol = abs(dunorm)
-                    if tol < 1e-3:
+                    if tol < 1e-2:
                         break
         else:
             self.dudt[start:] = np.linalg.solve(self.global_lhs[start:,start:], self.global_rhs[start:])
@@ -175,15 +170,17 @@ class Bobby1D(object):
         #print self.u[-1]
         #print self.dudt[:]*self.dt
         if self.periodic:
-            self.u[0] = self.u[-1]
-            self.dudt[0] = self.dudt[-1]
+            for ivar in range(self.nvar):
+                self.u[ivar] = self.u[ivar-self.nvar]
+                self.dudt[ivar] = self.dudt[ivar-self.nvar]
+                    
         
     def solve(self):
         while 1:
             self.step()
             self.step_solve()
             if self.solve_fd:
-                self.step_fd()
+                self.u_fd[:] = self.equation.step_fd(self.x, self.u_fd, self.dt, self.periodic)
             self.plot()
             self.t += self.dt
             self.step_count += 1
