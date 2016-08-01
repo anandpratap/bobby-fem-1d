@@ -49,7 +49,7 @@ class OneDimensionalWave(Bobby1D):
 
             func_residual_chi = lambda chi : 0*(self.N[0](chi)*dudt_local[0][ivar] + self.N[1](chi)*dudt_local[1][ivar]) + sum([(self.dN[0](chi)*u_local[0][jvar] + self.dN[1](chi)*u_local[1][jvar])*self.dflux[ivar][jvar](func_u_chi(chi)) for jvar in range(nvar)])
             #+ dudt_local[0]*self.N[0](chi) + + dudt_local[1]*self.N[1](chi)
-            func_tau_chi = lambda chi: 1.0/np.sqrt(4.0/self.dt**2*func_u_chi(chi)[0]**2 + (func_u_chi(chi)[0]**2)*(4*abs(self.wavespeed[ivar](func_u_chi(chi))))*dchidx**2)
+            func_tau_chi = lambda chi: self.equation.get_tau(func_u_chi(chi), self.dt, dchidx, ivar)
             func_tau_times_residual_chi = lambda chi : func_tau_chi(chi)*func_residual_chi(chi)
 
             A_ = lambda chi : sum([self.dflux[ivar][jvar](func_u_chi(chi)) for jvar in range(nvar)])
@@ -70,10 +70,10 @@ class OneDimensionalWave(Bobby1D):
                     local_linearization[1+2*ivar,1+2*jvar] -= integral(self.dN[1], tmp_func, self.N[1])*dxdchi
                     
 
-                    #tmp_func_1 = lambda chi: self.ddflux(func_u_chi(chi))*(self.dN[0](chi)*u_local[0] + self.dN[1](chi)*u_local[1])
-                    func_tau_chi = lambda chi: 1.0/np.sqrt(4.0/self.dt**2*func_u_chi(chi)[0]**2 + (func_u_chi(chi)[0]**2)*(4*abs(self.wavespeed[ivar](func_u_chi(chi))))*dchidx**2)
+                    # #tmp_func_1 = lambda chi: self.ddflux(func_u_chi(chi))*(self.dN[0](chi)*u_local[0] + self.dN[1](chi)*u_local[1])
+                    func_tau_chi = lambda chi: self.equation.get_tau(func_u_chi(chi), self.dt, dchidx, ivar)
 
-                    #func_tau_chi = lambda chi: 1.0/np.sqrt((4*abs(self.wavespeed[ivar](func_u_chi(chi))))*dchidx**2)
+                    # #func_tau_chi = lambda chi: 1.0/np.sqrt((4*abs(self.wavespeed[ivar](func_u_chi(chi))))*dchidx**2)
                     tmp_func_2 = lambda chi: self.dflux[ivar][jvar](func_u_chi(chi))
                     A_ = lambda chi :  sum([self.dflux[ivar][jvar](func_u_chi(chi)) for jvar in range(nvar)])
 
@@ -82,7 +82,7 @@ class OneDimensionalWave(Bobby1D):
                     local_linearization[1+2*ivar,0+2*jvar] += integral(A_, self.dN[1], func_tau_chi, tmp_func_2, self.dN[0])*dxdchi
                     local_linearization[1+2*ivar,1+2*jvar] += integral(A_, self.dN[1], func_tau_chi, tmp_func_2, self.dN[1])*dxdchi
 
-            # local_linearization[0,0] += integral(self.dN[0], func_tau_chi, tmp_func_1, self.N[0])*dxdchi
+            # Local_linearization[0,0] += integral(self.dN[0], func_tau_chi, tmp_func_1, self.N[0])*dxdchi
             # local_linearization[0,1] += integral(self.dN[0], func_tau_chi, tmp_func_1, self.N[1])*dxdchi
             # local_linearization[1,0] += integral(self.dN[1], func_tau_chi, tmp_func_1, self.N[0])*dxdchi
             # local_linearization[1,1] += integral(self.dN[1], func_tau_chi, tmp_func_1, self.N[1])*dxdchi
@@ -104,7 +104,8 @@ class OneDimensionalWave(Bobby1D):
             u_speed = self.wavespeed[var](u_tmp)
             u_max_speed = abs(u_speed).max()
             dt[var] = self.dxmin/u_max_speed*self.cfl
-        self.dt = 1e-5*self.cfl#dt.min()
+        self.dt = dt.min()
+        print self.dt
 
     def plot(self):
         plt.ion()
@@ -125,7 +126,10 @@ class OneDimensionalWave(Bobby1D):
         plt.clf()
         plt.title("t = %.5f cfl = %.3f implicit = %s"%(self.t, self.cfl, str(self.implicit)))
         for ivar in range(nvar):
-            plt.plot(self.x, self.u[ivar::nvar], ".-", label="FEM %s"%(self.equation.var_names[ivar]))
+            if ivar == 1:
+                plt.plot(self.x, self.u[ivar::nvar]/self.u[0::nvar], ".-", label="FEM %s"%(self.equation.var_names[ivar]))
+            else:
+                plt.plot(self.x, self.u[ivar::nvar], ".-", label="FEM %s"%(self.equation.var_names[ivar]))
         #if self.func_initial is not None:
         #    plt.plot(self.x, self.func_initial(self.x - self.wavespeed(self.u)*(self.t + self.dt)), "g-")
         if self.solve_fd:

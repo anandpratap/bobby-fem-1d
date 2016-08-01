@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from quadratures import GaussianQuadrature
 from shapefunctions import ShapeFunction
 from equations import Equation
-
+from smooth import smooth
 class Bobby1D(object):
     def __init__(self, x, u, tf, cfl = 0.5, periodic = True, step_count_max = 2, implicit = False, equation=Equation(), func_initial = None, solve_fd=False):
         self.setup(equation)
@@ -89,8 +89,6 @@ class Bobby1D(object):
         
 
     def step(self):
-        self.u = np.maximum(self.u, 1e-14)
-        self.calc_dt()
         self.global_mass[:,:] = 0.0
         self.global_linearization[:,:] = 0.0
         self.global_rhs[:] = 0.0
@@ -136,6 +134,8 @@ class Bobby1D(object):
     def step_solve(self):
         #print self.global_lhs
         #print self.u[-1]
+        
+
         if self.periodic:
             start = 1*self.nvar
         else:
@@ -144,7 +144,7 @@ class Bobby1D(object):
         if self.implicit:
             self.u_old = self.u.copy()
             print 10*"#"
-            for i in range(30):
+            for i in range(10):
                 self.du[start:] = np.linalg.solve(self.global_lhs[start:,start:], self.global_rhs[start:])
                 self.u[start:] = self.u[start:] + self.du[start:]
                 self.dudt[start:] = (self.u[start:]-self.u_old[start:])/self.dt
@@ -153,7 +153,6 @@ class Bobby1D(object):
                         self.u[ivar] = self.u[ivar-self.nvar]
                         self.dudt[ivar] = self.dudt[ivar-self.nvar]
                     
-                self.u = np.maximum(self.u, 1e-14)
                 self.step()
                 if i == 0:
                     dunorm_1 = np.linalg.norm(self.du)
@@ -164,6 +163,9 @@ class Bobby1D(object):
                     tol = abs(dunorm)
                     if tol < 1e-2:
                         break
+#            for ivar in range(self.nvar):
+                #self.u[ivar::self.nvar] = smooth(self.u[ivar::self.nvar], window_len=4)
+
         else:
             self.dudt[start:] = np.linalg.solve(self.global_lhs[start:,start:], self.global_rhs[start:])
             self.u[start:] += self.dudt[start:]*self.dt
@@ -177,6 +179,7 @@ class Bobby1D(object):
         
     def solve(self):
         while 1:
+            self.calc_dt()
             self.step()
             self.step_solve()
             if self.solve_fd:

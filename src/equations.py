@@ -47,6 +47,13 @@ class Equation(object):
         return u_fd_new
 
 
+
+    def get_tau(self, u, dt, dchidx, ivar=0):
+        tau_dt_term = 4.0/dt**2
+        tau_advection_term = 4.0*abs(self.wavespeed[ivar](u)**2)*(dchidx**2)
+        tau_1 =  1.0/np.sqrt(tau_dt_term + tau_advection_term)
+        return tau_1
+
 class BurgersEquation(Equation):
     def __init__(self, a=1):
         self.var_names = ["Burgers"]
@@ -83,17 +90,26 @@ class EulerEquation(Equation):
         gamma = 1.4
 
         def p(u):
-            pp = (gamma-1)*(u[2] - 0.5*u[1]**2)/u[0]
+            pp = (gamma-1)*(u[2] - 0.5*u[1]**2/u[0])
             return pp
 
         self.flux = [lambda u : u[1], 
-                     lambda u : 0.5*(3 - gamma)*u[1]**2/u[0] + (gamma - 1)*u[2], 
-                     lambda u: gamma*u[1]*u[2]/u[0] - 0.5*(gamma-1)*u[1]**2/u[0]**2]
+                     lambda u : u[1]**2/u[0] + (gamma-1)*(u[2] - 0.5*u[1]**2/u[0]),
+                     lambda u : u[1]/u[0]*(u[2] + (gamma-1)*(u[2] - 0.5*u[1]**2/u[0]))
+                 ]
 
         self.dflux = [[lambda u : np.zeros_like(u[0]), lambda u : np.ones_like(u[0]), lambda u : np.zeros_like(u[0])], 
-                      [lambda u : -0.5*(gamma-3)*(u[1]**2/u[0]**2), lambda u : (3 - gamma)*u[1]/u[0], lambda u : (gamma-1)*np.ones_like(u[0])],
+                      [lambda u : -0.5*(3-gamma)*(u[1]**2/u[0]**2), lambda u : (3 - gamma)*u[1]/u[0], lambda u : (gamma-1)*np.ones_like(u[0])],
                       [lambda u : -gamma*u[1]*u[2]/u[0]**2 + (gamma-1)*(u[1]/u[0])**3, lambda u : gamma*u[2]/u[0] - 1.5*(gamma-1)*(u[1]/u[0])**2, lambda u : gamma*u[1]/u[0]],
                   ]
         self.wavespeed = [lambda u : u[1]/u[0] + np.sqrt(gamma*p(u)/u[0]), lambda u : u[1]/u[0] + np.sqrt(gamma*p(u)/u[0]), lambda u : u[1]/u[0] + np.sqrt(gamma*p(u)/u[0])]
         self.ddflux = [lambda u : np.zeros_like(u)]
         self.dwavespeed = [lambda u : np.zeros_like(u)]
+
+
+        def get_tau(self, u, dt, dchidx, ivar=0):
+            tau_dt_term = 4.0/dt**2*u[0]**2
+            tau_advection_term = 4.0*abs(self.wavespeed[ivar](u)**2)*(dchidx**2)*u[0]**2
+            tau_1 =  1.0/np.sqrt(tau_dt_term + tau_advection_term)
+            return tau_1
+            
