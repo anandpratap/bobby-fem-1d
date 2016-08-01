@@ -126,10 +126,7 @@ class OneDimensionalWave(Bobby1D):
         plt.clf()
         plt.title("t = %.5f cfl = %.3f implicit = %s"%(self.t, self.cfl, str(self.implicit)))
         for ivar in range(nvar):
-            if ivar == 1:
-                plt.plot(self.x, self.u[ivar::nvar]/self.u[0::nvar], ".-", label="FEM %s"%(self.equation.var_names[ivar]))
-            else:
-                plt.plot(self.x, self.u[ivar::nvar], ".-", label="FEM %s"%(self.equation.var_names[ivar]))
+            plt.plot(self.x, self.u[ivar::nvar], ".-", label="FEM %s"%(self.equation.var_names[ivar]))
         #if self.func_initial is not None:
         #    plt.plot(self.x, self.func_initial(self.x - self.wavespeed(self.u)*(self.t + self.dt)), "g-")
         if self.solve_fd:
