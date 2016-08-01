@@ -105,7 +105,7 @@ class Bobby1D(object):
         if self.periodic:
             start = 1*self.nvar
         else:
-            start = 0
+            start = 1*self.nvar
 
         if self.implicit:
             self.global_lhs[:,:] = self.global_mass[:,:]/self.dt + self.global_linearization[:,:]
@@ -139,7 +139,7 @@ class Bobby1D(object):
         if self.periodic:
             start = 1*self.nvar
         else:
-            start = 0
+            start = 1*self.nvar
 
         if self.implicit:
             self.u_old = self.u.copy()
